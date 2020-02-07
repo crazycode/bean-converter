@@ -6,10 +6,12 @@ import com.intellij.psi.PsiField;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiType;
 import com.jiaqi.converter.utils.ProjectUtil;
+import com.jiaqi.converter.utils.SuggestionName;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -26,6 +28,10 @@ public class ClassMapResult {
     private List<String> notMappedToFields = new LinkedList<>();
 
     private List<String> notMappedFromFields = new LinkedList<>();
+
+    private List<String> publicNotMappedToFields = new LinkedList<>();
+
+    private List<String> publicNotMappedFromFields = new LinkedList<>();
 
     public Set<String> getMappedFields() {
         return this.mappedFields;
@@ -51,6 +57,14 @@ public class ClassMapResult {
         notMappedFromFields.add(fromField);
     }
 
+    private void addPublicNotMappedToField(String toField) {
+        publicNotMappedToFields.add(toField);
+    }
+
+    private void addPublicNotMappedFromField(String fromField) {
+        publicNotMappedFromFields.add(fromField);
+    }
+
     public static ClassMapResult from(PsiClass to, PsiClass from, boolean inherited) {
         ClassMapResult result = new ClassMapResult();
         result.from = from;
@@ -69,6 +83,8 @@ public class ClassMapResult {
                 PsiMethod fromGetter = findGetter(from, fieldName, useInherited);
                 if (toSetter != null && fromGetter != null && isMatchingFieldType(toField, fromGetter)) {
                     mappingResult.addMappedField(fieldName);
+                } else if (toField.hasModifier(JvmModifier.PUBLIC)) {
+                    mappingResult.addPublicNotMappedToField(fieldName);
                 } else {
                     mappingResult.addNotMappedToField(fieldName);
                 }
@@ -81,7 +97,11 @@ public class ClassMapResult {
             String fromFieldName = fromField.getName();
             if (!fromField.hasModifier(JvmModifier.STATIC)
                     && !mappingResult.getMappedFields().contains(fromFieldName)) {
-                mappingResult.addNotMappedFromField(fromFieldName);
+                if (fromField.hasModifier(JvmModifier.PUBLIC)) {
+                    mappingResult.addPublicNotMappedFromField(fromFieldName);
+                } else {
+                    mappingResult.addNotMappedFromField(fromFieldName);
+                }
             }
         }
     }
@@ -203,7 +223,42 @@ public class ClassMapResult {
     }
 
     public String writeNotMappedFields() {
-        return writeNotMappedFields(this.notMappedFromFields, this.from) + writeNotMappedFields(this.notMappedToFields, this.to);
+        return writePublicNotMappedFields(this.publicNotMappedFromFields, this.from, this.publicNotMappedToFields, this.to)
+                + "\n"
+                + writeNotMappedFields(this.notMappedFromFields, this.from) + writeNotMappedFields(this.notMappedToFields, this.to);
     }
+
+    /**
+     * 提供直接赋值方法
+     */
+    private String writePublicNotMappedFields(List<String> fromNotMappedFields, PsiClass fromPsiClass, List<String> toNotMappedFields, PsiClass toPsiClass) {
+
+        String fromName = SuggestionName.get(fromPsiClass);
+        String toName = SuggestionName.get(toPsiClass);
+
+        String indentation = ProjectUtil.getProjectIndentation(fromPsiClass);
+        StringBuilder builder = new StringBuilder();
+        if (!fromNotMappedFields.isEmpty()) {
+            builder.append("\n")
+                    .append(indentation)
+                    .append("// public mapped ")
+                    .append(fromPsiClass.getName())
+                    .append(" fields: \n");
+        }
+        Set<String> toNotMappedFieldSet = new HashSet<>(toNotMappedFields);
+        for (String notMappedField : fromNotMappedFields) {
+            if (toNotMappedFieldSet.contains(notMappedField)) {
+                builder.append(indentation)
+                        .append(toName)
+                        .append(".").append(notMappedField)
+                        .append(" = ")
+                        .append(fromName)
+                        .append(".").append(notMappedField)
+                        .append(";\n");
+            }
+        }
+        return builder.toString();
+    }
+
 
 }

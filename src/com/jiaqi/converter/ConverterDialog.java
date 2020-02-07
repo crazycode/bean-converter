@@ -47,7 +47,6 @@ public class ConverterDialog extends DialogWrapper {
         this.dialog = createConverterDialog();
         List<String> classNamesForAutocompletion = getClassNamesForAutocompletion();
 
-        this.inheritFields = new JCheckBox("Use inherited fields");
         if (from) {
             this.fromField = createTextField(classNamesForAutocompletion);
             LabeledComponent<TextFieldWithAutoCompletion> convertFromComponent = LabeledComponent.create(fromField, "Convert From class");
@@ -60,6 +59,7 @@ public class ConverterDialog extends DialogWrapper {
             dialog.add(convertToComponent);
         }
 
+        this.inheritFields = new JCheckBox("Use inherited fields");
         dialog.add(this.inheritFields);
 
         init();
